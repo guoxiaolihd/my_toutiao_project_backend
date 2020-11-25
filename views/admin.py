@@ -5,6 +5,27 @@ from functools import wraps
 from models import User
 from werkzeug.security import generate_password_hash, check_password_hash
 
+
+def login_required(f):
+    @wraps(f)
+    def wrap(*args, **kwargs):
+        if "Authorization" in request.headers:
+            # Check whether token was sent
+            authorization_header = request.headers["Authorization"]
+
+            # Check whether token is valid
+            try:
+                token = authorization_header.split(" ")[1]
+                user = jwt.decode(token, app.config["SECRET_KEY"])
+            except:
+                return jsonify({"error": "you are not logged in"}), 401
+
+            return f(userid=user["userid"], *args, **kwargs)
+        else:
+            return jsonify({"error": "you are not logged in"}), 401
+    return wrap
+
+
 from app import app
 
 
@@ -17,7 +38,8 @@ def login():
     #     photo='http://toutiao-img.itheima.net/FuyELvGh8jbise6dfoEr0W7luPLq',
     #     gender=1,
     #     name='zhangsan',
-    #     intro='zhangsanfeng'
+    #     intro='zhangsanfeng',
+    #     email='zhangsan.@qq.com'
     # ).save()
 
     if not request.json.get("mobile"):
@@ -40,18 +62,29 @@ def login():
     if not check_password_hash(user.code, request.json.get("code")):
         return jsonify({"error": "Invalid password"}), 401
 
-    # token = jwt.encode({
-    #     "userid": str(user.id),
-    #     "username": user.username,
-    #     "email": user.email,
-    #     "password": user.password,
-    #     "created": str(user.created)
-    # }, app.config["SECRET_KEY"])
+    token = jwt.encode({
+        # 后台真正有用的仅仅userid
+        "userid": str(user.id),
+        "name": user.name,
+        "email": user.email,
+        "code": user.code,
+        "created": str(user.created)
+    }, app.config["SECRET_KEY"]).decode('utf8')
 
     return jsonify({
         "message": 'OK',
         "data": {
             "user": user.name,
-            "token": "xxxxxxxxxxxxxxxx",
+            "token": token,
         }
+    })
+
+
+@app.route("/mp/v1_0/user/profile", methods=["GET"])
+@login_required
+def get_user_profile(userid):
+    user = User.objects(id=userid).first()
+    return jsonify({
+        "message": 'OK',
+        "data": user.to_public_json()
     })
