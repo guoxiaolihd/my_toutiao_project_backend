@@ -2,10 +2,10 @@ import jwt
 
 from flask import jsonify, request
 from functools import wraps
-from models import User
+from models import User, Channel
 from werkzeug.security import generate_password_hash, check_password_hash
 
-
+# 是否是通过登录到达此页面的
 def login_required(f):
     @wraps(f)
     def wrap(*args, **kwargs):
@@ -29,6 +29,7 @@ def login_required(f):
 from app import app
 
 
+# 登录 判断输入是否正确（比对数据库存储的用户信息） 正确返回token（jwt）
 @app.route("/mp/v1_0/authorizations", methods=["POST"])
 def login():
     # hashed_password = generate_password_hash('246810')
@@ -80,6 +81,7 @@ def login():
     })
 
 
+# 得到用户信息
 @app.route("/mp/v1_0/user/profile", methods=["GET"])
 @login_required
 def get_user_profile(userid):
@@ -87,4 +89,33 @@ def get_user_profile(userid):
     return jsonify({
         "message": 'OK',
         "data": user.to_public_json()
+    })
+
+
+# 频道的信息的接口
+@app.route("/mp/v1_0/channels", methods=["GET"])
+@login_required
+def get_channels(userid):
+    # channel1 = Channel(
+    #     name='python'
+    # )
+    # channel1.save()
+    #
+    # channel2 = Channel(
+    #     name='java'
+    # )
+    # channel2.save()
+    #
+    # channel3 = Channel(
+    #     name='mysql'
+    # )
+    # channel3.save()
+
+    channels = Channel.objects()
+
+    return jsonify({
+        "message": 'OK',
+        "data": {
+            "channels": channels.to_public_json()
+        }
     })
