@@ -1,8 +1,15 @@
+import os
+import uuid
+
 import jwt
 
-from flask import jsonify, request
+from flask import jsonify, request, send_from_directory
 from functools import wraps
-from models import User, Channel
+
+from mongoengine import Q
+
+import config
+from models import User, Channel, Img
 from werkzeug.security import generate_password_hash, check_password_hash
 
 # 是否是通过登录到达此页面的
@@ -119,3 +126,92 @@ def get_channels(userid):
             "channels": channels.to_public_json()
         }
     })
+
+
+@app.route("/mp/v1_0/user/images", methods=["POST"])
+@login_required
+def upload(userid):
+    user = User.objects(id=userid).first()
+    image = request.files.get("image")
+    if image:
+        if not image.filename.endswith(tuple([".jpg", ".png"])):
+            return jsonify({"error": "Image is not valid"}), 409
+
+        # Generate random filename
+        filename = str(uuid.uuid4()).replace("-", "") + "." + image.filename.split(".")[-1]
+
+        if not os.path.isdir(config.image_upload_folder):
+            os.makedirs(config.image_upload_folder)
+
+        image.save(os.path.join(config.image_upload_folder, filename))
+        img = Img(
+            url=filename,
+            user=user
+        ).save()
+    else:
+        filename = None
+
+    return jsonify({
+        "message": 'OK',
+        "data": img.to_public_json()
+    })
+
+
+@app.route("/file/<string:filename>")
+def images_rsp(filename):
+    return send_from_directory(config.image_upload_folder, filename)
+
+
+# {"message": "OK", "data": {"id": 30840, "collect": true}}
+@app.route("/mp/v1_0/user/images/<string:imageId>", methods=["PUT","DELETE"])
+@login_required
+def collectImage(userid, imageId):
+    print(request.method)
+    if request.method == 'PUT':
+        img = Img.objects(id=imageId).first()
+        img.is_collected = request.json.get('collect')
+        img.save()
+        return jsonify({
+            "message": 'OK',
+            "data": {
+                "id": str(img.id),
+                "collect": img.is_collected
+            }
+        })
+    elif request.method == 'DELETE':
+        img = Img.objects(id=imageId).first()
+        img.delete()
+        return jsonify({
+            "message": 'OK',
+            "data": {
+                "id": str(img.id),
+                "collect": img.is_collected
+            }
+        })
+
+
+@app.route("/mp/v1_0/user/images")
+@login_required
+def get_images(userid):
+    user = User.objects(id=userid).first()
+    collect = request.args.get("collect")
+    if collect == 'true':
+        imgs = Img.objects(Q(user=user) & Q(is_collected=True))
+    elif collect == 'false':
+        imgs = Img.objects(user=user)
+
+    page = int(request.args.get("page"))
+    per_page = int(request.args.get("per_page"))
+
+    paginated_imgs = imgs.skip((page - 1) * per_page).limit(per_page)
+
+    return jsonify({
+        "message": 'OK',
+        "data": {
+            "total_count": imgs.count(),
+            "page": page,
+            "per_page": per_page,
+            "results": paginated_imgs.to_public_json()
+        }
+    })
+

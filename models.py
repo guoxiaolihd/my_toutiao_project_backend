@@ -1,8 +1,10 @@
 import datetime
 
 from mongoengine import *
+import config
 
 connect("yesterday_toutiao")
+
 
 # 字典形式转换为列表用于数据的返回
 class CustomQuerySet(QuerySet):
@@ -17,6 +19,7 @@ class CustomQuerySet(QuerySet):
         return result
 
 
+# 用户信息
 class User(Document):
     mobile = StringField(max_length=11, unique=True)
     name = StringField(required=True, unique=True)
@@ -44,11 +47,29 @@ class User(Document):
 # 添加频道的信息（id+name）
 class Channel(Document):
     name = StringField(max_length=120, required=True)
+
     meta = {'queryset_class': CustomQuerySet}
 
     def to_public_json(self):
         data = {
             "id": str(self.id),
             "name": self.name,
+        }
+        return data
+
+
+# 图片信息(id+url+是否收藏)
+class Img(Document):
+    user = ReferenceField(User, reverse_delete_rule=CASCADE)
+    url = StringField(max_length=200, required=True)
+    is_collected = BooleanField(required=True, default=False)
+
+    meta = {'queryset_class': CustomQuerySet}
+
+    def to_public_json(self):
+        data = {
+            "id": str(self.id),
+            "url": config.base_url + self.url,
+            "is_collected": self.is_collected
         }
         return data
